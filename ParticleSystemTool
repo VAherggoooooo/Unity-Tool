@@ -1,0 +1,260 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+#if UNITY_EDITOR
+using UnityEditor;
+[ExecuteInEditMode]
+public class ParticleSystemTool : MonoBehaviour
+{
+    public List<ParticleSystem> parts = new List<ParticleSystem>();
+    public float psTime = 0f;
+
+    private int curSeed = 1;//当前种子
+
+    private bool editorPlaying = false;//编辑器模式下是否正在播放粒子系统
+    public bool EditorPlaying
+    {
+        get
+        {
+            return editorPlaying;
+        }
+    }
+
+    private float curPlayTime;//粒子当前播放时刻
+    public float CurPlayTime
+    {
+        get
+        {
+            return curPlayTime;
+        }
+        set
+        {
+            curPlayTime = value;
+        }
+    }
+
+
+    private void Awake()
+    {
+        psTime = 0f;
+        InitPartsList();
+    }
+
+    #region 设置粒子系统列表
+    /// <summary>
+    /// 更新粒子列表
+    /// </summary>
+    public void InitPartsList()
+    {
+        parts.Clear();
+        FindParts(transform);
+
+        if (parts.Count <= 0)
+        {
+            Debug.Log("没有找到粒子系统!");
+        }
+        else
+        {
+            if (psTime <= 0f)
+            {
+                psTime = parts[0].main.duration;
+            }
+        }
+        
+    }
+    private void FindParts(Transform r)
+    {
+        foreach (Transform t in r)
+        {
+            ParticleSystem ps = t.GetComponent<ParticleSystem>();
+            if (ps != null)
+            {
+                parts.Add(ps);
+            }
+        }
+    }
+    #endregion
+
+    #region 工具功能函数
+    /// <summary>
+    /// 播放粒子系统
+    /// </summary>
+    public void PlayParts()
+    {
+        if (Application.isPlaying)//运行模式
+        {
+            foreach (ParticleSystem ps in parts)
+            {
+                //开启随机种子
+                ps.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);//清除之前的粒子
+                ps.useAutoRandomSeed = true;
+                //播放
+                ps.Play();
+            }
+        }
+        else//编辑器模式
+        {
+            #region 关闭随机种子, 手动设置种子
+            foreach (ParticleSystem ps in parts)
+            {
+                ps.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);//清除之前的粒子
+                ps.randomSeed = (uint)curSeed;
+            }
+            curSeed = (curSeed + 1) % 100;
+            #endregion
+
+            editorPlaying = true;
+            curPlayTime = 0f;
+        }
+    }
+
+
+    /// <summary>
+    /// 停止粒子系统
+    /// </summary>
+    public void StopParts()
+    {
+        if (!Application.isPlaying)
+        {
+            editorPlaying = false;
+            curPlayTime = 0;
+        }
+        foreach (ParticleSystem ps in parts)
+        {
+            ps.Stop(false, ParticleSystemStopBehavior.StopEmittingAndClear);//清除之前的粒子
+        }
+    }
+    #endregion
+}
+
+[CustomEditor(typeof(ParticleSystemTool))]
+public class ParticleSystemTool_Editor : Editor
+{
+    private ParticleSystemTool script;//脚本
+    private SerializedObject script_pro;//脚本属性
+
+    private double preTime;//上一次系统时间
+    private float curTime;//当前播放时间
+
+    private void OnEnable()
+    {
+        script = target as ParticleSystemTool;
+        script_pro = new SerializedObject(target);
+
+        EditorApplication.update += EditorUpdate;
+    }
+    private void OnDisable()
+    {
+        EditorApplication.update -= EditorUpdate;
+    }
+
+    /// <summary>
+    /// 编辑器每帧执行内容
+    /// </summary>
+    private void EditorUpdate()
+    {
+        if (Application.isPlaying)
+        {
+            return;
+        }
+        //编辑器模式下才进行: 
+        //求帧间隔时间
+        double delta = Time.realtimeSinceStartup - preTime;
+        preTime = Time.realtimeSinceStartup;
+
+        //如果编辑器模型下播放粒子
+        if (script.EditorPlaying)
+        {
+            //时间增加
+            if (script.CurPlayTime < script.psTime)
+            {
+                script.CurPlayTime = script.CurPlayTime + (float)delta;
+            }
+            else//播放完毕
+            {
+                script.StopParts();
+            }
+
+            //播放粒子
+            foreach (ParticleSystem ps in script.parts)
+            {
+                ps.Simulate(script.CurPlayTime);
+            }
+        }
+    }
+    /// <summary>
+    /// 编辑器手动设置播放时间
+    /// </summary>
+    private void EditorManualUpdate()
+    {
+        //播放粒子
+        foreach (ParticleSystem ps in script.parts)
+        {
+            ps.Simulate(curTime);
+        }
+    }
+
+    #region 编辑器面板绘制
+    public override void OnInspectorGUI()
+    {
+        script_pro.Update();//更新
+        //base.OnInspectorGUI();//默认面板绘制
+
+        //logo
+        GUILayout.Space(6);
+        GUI.skin.label.fontSize = 24;
+        GUI.skin.label.alignment = TextAnchor.MiddleCenter;
+        GUILayout.Label("Particle System Tool - v.1.0.0");
+        GUI.skin.label.fontSize = 12;
+
+        //粒子系统列表
+        GUILayout.Space(8);
+        EditorGUILayout.PropertyField(script_pro.FindProperty("parts"), new GUIContent("Particle List: "));
+
+        //粒子播放时间
+        GUILayout.Space(5);
+        EditorGUILayout.PropertyField(script_pro.FindProperty("psTime"), new GUIContent("Play Time: "));
+
+        //手动滑杆控制粒子播放
+        //编辑器模式下非播放状态才可手动播放
+        if (!Application.isPlaying)
+        {
+            curTime = EditorGUILayout.Slider("Current Time:", curTime, 0f, script.psTime);
+            if (!script.EditorPlaying)
+            {
+                EditorManualUpdate();
+                GUILayout.Space(5);
+            }
+        }
+        GUILayout.Space(20);
+        //刷新粒子系统列表按钮
+        if (GUILayout.Button("Init Particle System List"))
+        {
+            script.InitPartsList();
+        }
+
+        GUILayout.Space(5);
+        //播放粒子系统按钮
+        if (GUILayout.Button("Play"))
+        {
+            script.PlayParts();
+        }
+
+        GUILayout.Space(5);
+        //停止粒子系统按钮
+        if (GUILayout.Button("Stop"))
+        {
+            script.StopParts();
+        }
+
+        
+
+        GUILayout.Space(20);
+
+        script_pro.ApplyModifiedProperties();//应用
+    }
+    #endregion
+}
+
+#endif
