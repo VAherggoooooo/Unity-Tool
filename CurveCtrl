@@ -1,0 +1,122 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEditor;
+
+[ExecuteInEditMode]
+public class CurveCtrl : MonoBehaviour
+{
+    [HideInInspector]public List<Transform> ctrlPoints = new List<Transform>();
+    public Transform mover;
+    [Range(0.0f, 1.0f)]public float t;
+
+
+    #region Init Ctrl Points
+    [ContextMenu("Init Ctrl Points")]
+    public void InitCtrlPoints()
+    {
+        ctrlPoints.Clear();
+        foreach (Transform b in transform)
+        {
+            ctrlPoints.Add(b);
+        }
+        Debug.Log(ctrlPoints.Count);
+    }
+    #endregion
+    #region set path position
+    private Vector3 SetPathPos(List<Transform> cp, float t_t)
+    {                          
+        Vector3 b0 = cp[0].position;
+        Vector3 b1 = cp[1].position;
+        Vector3 b2 = cp[2].position;
+        Vector3 b3 = cp[3].position;
+
+        Vector3 b4 = SetPosT(b0, b1, t_t);
+        Vector3 b5 = SetPosT(b1, b2, t_t);
+        Vector3 b6 = SetPosT(b2, b3, t_t);
+
+        Vector3 b7 = SetPosT(b4, b5, t_t);
+        Vector3 b8 = SetPosT(b5, b6, t_t);
+
+        Vector3 b9 = SetPosT(b7, b8, t_t);
+
+
+        return b9;
+    }
+    private Vector3 SetPosT(Vector3 b0, Vector3 b1, float t_t)
+    {
+        Vector3 b2 = (1 - t_t) * b0 + t_t * b1;
+        return b2;
+    }
+    #endregion
+    #region get velocity
+    public Vector3 GetVelocity(float t_t, float step = 0.01f)
+    {
+        Vector3 dir = SetPathPos(ctrlPoints, t_t + step) - mover.position;
+        return dir.normalized;
+    }
+    #endregion
+
+    private void Awake()
+    {
+        InitCtrlPoints();
+
+        if (mover == null)
+        {
+            Debug.Log("没有移动器");
+            enabled = false;
+        }
+    }
+
+    private void Update()
+    {
+        if (ctrlPoints.Count <= 0)
+        {
+            return;
+        }
+
+        if (mover != null)
+        {
+            mover.position = SetPathPos(ctrlPoints, t);
+            mover.rotation = Quaternion.LookRotation(GetVelocity(t), Vector3.Cross(GetVelocity(t), mover.transform.right));
+        }
+    }
+}
+
+[CustomEditor(typeof(CurveCtrl))]
+class CurveCtrlEditor : Editor
+{
+    CurveCtrl mScript;
+    Vector3 startPoint, endPoint, startTangent, endTangent;
+    private void OnSceneGUI()
+    {
+        mScript = target as CurveCtrl;
+
+        DrawBezierCurve();
+    }
+    private void DrawBezierCurve()
+    {
+        mScript.ctrlPoints[0].position = Handles.PositionHandle(mScript.ctrlPoints[0].position, Quaternion.identity);
+        mScript.ctrlPoints[3].position = Handles.PositionHandle(mScript.ctrlPoints[3].position, Quaternion.identity);
+        mScript.ctrlPoints[1].position = Handles.PositionHandle(mScript.ctrlPoints[1].position, Quaternion.identity);
+        mScript.ctrlPoints[2].position = Handles.PositionHandle(mScript.ctrlPoints[2].position, Quaternion.identity);
+
+        startPoint = mScript.ctrlPoints[0].position;
+        endPoint = mScript.ctrlPoints[3].position;
+        startTangent = mScript.ctrlPoints[1].position;
+        endTangent = mScript.ctrlPoints[2].position;
+
+        Handles.DrawBezier(startPoint, endPoint, startTangent, endTangent, Color.red, null, 2f);
+
+        Handles.color = Color.white;
+        Handles.DrawDottedLine(startPoint, startTangent, 1f);
+        Handles.DrawDottedLine(endTangent, endPoint, 1f);
+
+
+        Handles.color = Color.blue;
+        if (mScript.mover != null)
+        {
+            Handles.DrawLine(mScript.mover.position, mScript.mover.position + mScript.GetVelocity(mScript.t));
+        }
+    }
+}
