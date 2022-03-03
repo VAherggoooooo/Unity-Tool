@@ -1,0 +1,121 @@
+#if UNITY_EDITOR
+using System.IO;
+using System.Text;
+using UnityEditor;
+using UnityEngine;
+
+public class ScriptCreateTool : EditorWindow
+{
+    private string className;//类名
+    private int number;//脚本数量
+    private string number_str;
+    private string buttonStr;
+    [MenuItem("Tool/Script Create Tool")]
+    private static void CreateWindow()
+    {
+        GetWindow<ScriptCreateTool>("Script Create Tool").Show();
+    }
+
+    private void OnGUI()
+    {
+        GUILayout.Space(20);
+        int fontSize = GUI.skin.font.fontSize;
+        GUI.skin.label.fontSize = 30;
+        GUI.skin.label.alignment = TextAnchor.MiddleCenter;
+        GUILayout.Label("Script Create Tool");
+        GUI.skin.label.alignment = TextAnchor.MiddleLeft;
+        GUI.skin.label.fontSize = fontSize + 2;
+        GUILayout.Space(20);
+
+        GUILayout.BeginHorizontal();
+        {
+            GUILayout.Label("Class Name: ");
+            GUILayout.FlexibleSpace();
+            className = GUILayout.TextField(className, GUILayout.MinWidth(150));
+        }
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(10);
+
+        GUILayout.BeginHorizontal();
+        {
+            GUILayout.Label("Number: ");
+            number_str = GUILayout.TextField(number_str, GUILayout.MaxWidth(40));
+            
+        }
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(20);
+
+        Object o = Selection.activeObject;//选择物体
+        string path = AssetDatabase.GetAssetPath(o);//路径
+        string extension = Path.GetExtension(path);//后缀
+        if (o != null && path != "" && extension == "" && className.Trim() != string.Empty)
+        {
+            //当有选择物, 且路径不为空(为空则为场景物体), 且后缀为空(文件夹)时
+            GUI.enabled = true;
+            buttonStr = "Create Scripts";
+        }
+        else
+        {
+            GUI.enabled = false;
+            buttonStr = "Null";
+        }
+
+        if (GUILayout.Button(buttonStr))
+        {            
+
+            if (path != "")
+            {
+                try
+                {
+                    number = int.Parse(number_str);
+                }
+                catch
+                {
+                    Debug.LogError("脚本数量输入错误!");
+                }
+
+                for (int i = 0; i < number; i++)
+                {
+                    string className = this.className.Trim() + i;//脚本类名
+                    string name = "/" + className + ".cs";//文件名
+                    File.WriteAllText(path + name, ReturnName(className));//创建一个新文件，向其中写入指定的字符串，然后关闭文件
+                }
+            }
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+        }
+        GUI.skin.label.fontSize = fontSize;
+    }
+
+    /// <summary>
+    /// 为脚本添加内容
+    /// </summary>
+    /// <param name="className">脚本类名</param>
+    /// <returns></returns>
+    private string ReturnName(string className)
+    {
+        StringBuilder sb = new StringBuilder();
+
+        sb.AppendLine("using System.Collections;");
+        sb.AppendLine("using System.Collections.Generic;");
+        sb.AppendLine("using UnityEngine;");
+        sb.AppendLine();
+        sb.AppendFormat("public class {0} : MonoBehaviour ", className);
+        sb.AppendLine();
+        sb.AppendLine("{");
+        //sb.AppendFormat("\r\tprivate void Start()");
+        //sb.AppendLine("\r\t{");
+        sb.AppendLine();
+        //sb.AppendLine("\t}");
+        //sb.AppendFormat("\r\tprivate void Update()");
+        //sb.AppendLine("\r\t{");
+        //sb.AppendLine();
+        //sb.AppendLine("\t}");
+        sb.AppendLine("}");
+
+        return sb.ToString();
+    }
+}
+#endif
